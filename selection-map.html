@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre with Sentinel-2 Cloudless and Grid Overlay</title>
+    
+    <!-- MapLibre GL JS CSS and JavaScript -->
+    <link href="https://unpkg.com/maplibre-gl@3.5.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.5.2/dist/maplibre-gl.js"></script>
+    
+    <!-- JSZip for handling the zipped GeoJSON -->
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #loading { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            padding: 10px; 
+            background: white; 
+            border-radius: 4px; 
+            z-index: 1;
+            display: none;
+        }
+        .maplibregl-popup-content {
+            max-width: 300px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .property-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .property-table td, .property-table th {
+            border: 1px solid #ddd;
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .property-table th {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            text-align: left;
+            background-color: #f2f2f2;
+        }
+        
+        /* Sidebar styles */
+        #sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100%;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 2;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        #search-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            width: 100%;
+            font-size: 14px;
+            display: none; /* Hidden until a grid cell is selected */
+        }
+        
+        #search-button:hover {
+            background-color: #45a049;
+        }
+        
+        #search-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #search-results {
+            margin-top: 10px;
+        }
+        
+        .result-item {
+            border: 1px solid #ddd;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: row;
+        }
+        
+        .result-thumbnail {
+            margin-right: 10px;
+            width: 100px;
+            min-width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f5f5f5;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .result-thumbnail img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .result-info {
+            flex: 1;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+        
+        .result-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        
+        .result-date, .result-cloud {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+        
+        .result-link {
+            display: block;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+        
+        .search-status {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        
+        /* Button styling */
+        .view-map-btn {
+            margin-top: 5px;
+            padding: 4px 8px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .view-map-btn:hover {
+            background-color: #3367d6;
+        }
+        
+        .view-map-btn.active {
+            background-color: #34a853;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading">Loading S2 grid data...</div>
+    
+    <!-- Sidebar for search functionality -->
+    <div id="sidebar">
+        <h3>STAC Search</h3>
+        <div id="selection-info">No grid cell selected. Click on a grid cell to select it.</div>
+        <button id="search-button" disabled>Search Sentinel-2 Images</button>
+        <div id="search-status" class="search-status"></div>
+        <div id="search-results"></div>
+    </div>
+    
+    <script>
+        // Initialize the map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    // Add the Sentinel-2 cloudless imagery as a raster source
+                    'sentinel-cloudless': {
+                        type: 'raster',
+                        tiles: [
+                            'https://tiles.maps.eox.at/wmts?layer=s2cloudless-2024_3857&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}'
+                        ],
+                        tileSize: 256,
+                        attribution: 'Sentinel-2 cloudless imagery by <a href="https://eox.at">EOX</a>'
+                    }
+                },
+                layers: [
+                    // Add the Sentinel-2 cloudless imagery as a layer
+                    {
+                        id: 'sentinel-cloudless-layer',
+                        type: 'raster',
+                        source: 'sentinel-cloudless',
+                        minzoom: 0,
+                        maxzoom: 18
+                    }
+                ]
+            },
+            center: [0, 0],
+            zoom: 2
+        });
+        
+        // Create a popup but don't add it to the map yet
+        const popup = new maplibregl.Popup({
+            closeButton: true,
+            closeOnClick: true,
+            maxWidth: '300px'
+        });
+        
+        // Store the currently selected feature
+        let selectedFeature = null;
+        
+        // Keep track of the currently displayed STAC layer
+        let currentStacLayerId = null;
+        
+        // Function to add a STAC item as a layer to the map
+        function addStacLayerToMap(itemId, bounds) {
+            try {
+                // Show loading status
+                searchStatus.innerHTML = 'Loading image layer...';
+                
+                // Remove existing STAC layer if there is one
+                if (currentStacLayerId) {
+                    if (map.getLayer(currentStacLayerId)) {
+                        map.removeLayer(currentStacLayerId);
+                    }
+                    if (map.getSource(currentStacLayerId)) {
+                        map.removeSource(currentStacLayerId);
+                    }
+                    
+                    // Reset active buttons
+                    document.querySelectorAll('.view-map-btn').forEach(btn => {
+                        btn.textContent = 'View on Map';
+                        btn.classList.remove('active');
+                    });
+                }
+                
+                // Create the tile URL template with the item ID
+                const tileUrlTemplate = `https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?collection=sentinel-2-l2a&item=${itemId}&assets=visual&asset_bidx=visual%7C1%2C2%2C3&nodata=0&format=png`;
+                
+                // Create a new layer ID
+                currentStacLayerId = `stac-layer-${itemId}`;
+                
+                // Add the source
+                map.addSource(currentStacLayerId, {
+                    type: 'raster',
+                    tiles: [tileUrlTemplate],
+                    tileSize: 256,
+                    attribution: 'Sentinel-2 imagery from <a href="https://planetarycomputer.microsoft.com/">Planetary Computer</a>'
+                });
+                
+                // Add the layer
+                map.addLayer({
+                    id: currentStacLayerId,
+                    type: 'raster',
+                    source: currentStacLayerId,
+                    paint: {
+                        'raster-opacity': 1
+                    }
+                });
+                
+                // If bounds are available, zoom to them
+                if (bounds) {
+                    map.fitBounds([
+                        [bounds[0], bounds[1]], // Southwest corner
+                        [bounds[2], bounds[3]]  // Northeast corner
+                    ], {
+                        padding: 50,
+                        duration: 1000
+                    });
+                }
+                
+                // Update status
+                searchStatus.innerHTML = `Showing image: ${itemId}`;
+                
+                return true;
+            } catch (error) {
+                console.error("Error adding STAC layer:", error);
+                searchStatus.innerHTML = `Error loading image: ${error.message}`;
+                return false;
+            }
+        }
+        
+        // References to DOM elements
+        const searchButton = document.getElementById('search-button');
+        const selectionInfo = document.getElementById('selection-info');
+        const searchResults = document.getElementById('search-results');
+        const searchStatus = document.getElementById('search-status');
+
+        // When the map loads, fetch and add the zipped S2 grid GeoJSON layer
+        map.on('load', async function() {
+            const loadingElement = document.getElementById('loading');
+            loadingElement.style.display = 'block';
+            
+            try {
+                // Fetch the zipped GeoJSON
+                const zipUrl = 'https://data.source.coop/cholmes/s2-grid/s2-grid.geojson.zip';
+                const response = await fetch(zipUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch zip file: ${response.status} ${response.statusText}`);
+                }
+                
+                // Get the zip file data as an ArrayBuffer
+                const zipData = await response.arrayBuffer();
+                
+                // Use JSZip to unzip the data
+                const zip = await JSZip.loadAsync(zipData);
+                
+                // Assuming the zip contains a single GeoJSON file named s2-grid.geojson
+                const geojsonFile = zip.file("s2-grid.geojson");
+                
+                if (!geojsonFile) {
+                    throw new Error("Could not find s2-grid.geojson in the zip file");
+                }
+                
+                // Extract the GeoJSON content as text
+                const geojsonText = await geojsonFile.async("string");
+                
+                // Parse the GeoJSON
+                const geojsonData = JSON.parse(geojsonText);
+                
+                // Add the S2 grid GeoJSON as a source
+                map.addSource('s2-grid', {
+                    type: 'geojson',
+                    data: geojsonData
+                });
+
+                // Add the S2 grid as a fill layer with mostly transparent fill
+                map.addLayer({
+                    id: 's2-grid-fill',
+                    type: 'fill',
+                    source: 's2-grid',
+                    paint: {
+                        'fill-color': '#088',
+                        'fill-opacity': 0.1
+                    }
+                });
+
+                // Add the S2 grid as a line layer with thin lines
+                map.addLayer({
+                    id: 's2-grid-line',
+                    type: 'line',
+                    source: 's2-grid',
+                    paint: {
+                        'line-color': '#088',
+                        'line-width': 0.5,
+                        'line-opacity': 0.8
+                    }
+                });
+                
+                // Add click interaction
+                map.on('click', 's2-grid-fill', (e) => {
+                    // Get the clicked feature
+                    const features = map.queryRenderedFeatures(e.point, { layers: ['s2-grid-fill'] });
+                    
+                    if (!features.length) {
+                        return;
+                    }
+                    
+                    const feature = features[0];
+                    selectedFeature = feature;
+                    
+                    // Calculate the bounds of the feature
+                    const bounds = new maplibregl.LngLatBounds();
+                    
+                    // For polygons, we need to add all coordinates to the bounds
+                    if (feature.geometry.type === 'Polygon') {
+                        feature.geometry.coordinates[0].forEach(coord => {
+                            bounds.extend(coord);
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        feature.geometry.coordinates.forEach(polygon => {
+                            polygon[0].forEach(coord => {
+                                bounds.extend(coord);
+                            });
+                        });
+                    }
+                    
+                    // Zoom to the feature with some padding
+                    map.fitBounds(bounds, {
+                        padding: 50,
+                        maxZoom: 13, // Limit how far it zooms in
+                        duration: 1000 // Animation time in milliseconds
+                    });
+                    
+                    // Format the properties as an HTML table
+                    let tableContent = '<table class="property-table"><tr><th>Property</th><th>Value</th></tr>';
+                    for (const [key, value] of Object.entries(feature.properties)) {
+                        tableContent += `<tr><td>${key}</td><td>${value}</td></tr>`;
+                    }
+                    tableContent += '</table>';
+                    
+                    // Set popup content and position
+                    popup
+                        .setLngLat(e.lngLat)
+                        .setHTML(`<h4>S2 Grid Cell Properties</h4>${tableContent}`)
+                        .addTo(map);
+                    
+                    // Use the 'Name' property specifically as confirmed by the user
+                    let mgrsTileId = feature.properties.Name || '37PDN';
+                    
+                    console.log("Found MGRS Tile ID:", mgrsTileId, "from property 'Name'");
+                    
+                    // Update the sidebar with selected grid cell info
+                    selectionInfo.innerHTML = `<strong>Selected Grid Cell:</strong> ${mgrsTileId}`;
+                    
+                    // Store the MGRS tile ID in a data attribute for easy access
+                    searchButton.dataset.mgrsTileId = mgrsTileId;
+                    
+                    // Enable the search button
+                    searchButton.disabled = false;
+                    searchButton.style.display = 'block';
+                    
+                    // Clear previous search results
+                    searchResults.innerHTML = '';
+                    searchStatus.innerHTML = '';
+                });
+                
+                // Change cursor to pointer when hovering over a feature
+                map.on('mouseenter', 's2-grid-fill', () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+                
+                map.on('mouseleave', 's2-grid-fill', () => {
+                    map.getCanvas().style.cursor = '';
+                });
+                
+                // Hide loading indicator
+                loadingElement.style.display = 'none';
+                
+            } catch (error) {
+                console.error("Error loading S2 grid data:", error);
+                loadingElement.textContent = 'Error loading S2 grid data';
+                setTimeout(() => {
+                    loadingElement.style.display = 'none';
+                }, 3000);
+            }
+        });
+        
+        // Add event listener for the search button
+        searchButton.addEventListener('click', async () => {
+            if (!selectedFeature) {
+                return;
+            }
+            
+            // Get the MGRS tile ID from the selected feature
+            let mgrsTileId = selectedFeature.properties.Name || '37PDN'; // Default to '37PDN' if name property doesn't exist
+            
+            // Show searching status
+            searchStatus.innerHTML = 'Searching for Sentinel-2 images...';
+            searchResults.innerHTML = '';
+            searchButton.disabled = true;
+            
+            try {
+                // Create the CQL filter and encode it for URL
+                const cqlFilter = encodeURIComponent(`eo:cloud_cover < 10 AND s2:mgrs_tile='${mgrsTileId}'`);
+                                // Construct the GET URL with query parameters
+                const searchUrl = `https://planetarycomputer.microsoft.com/api/stac/v1/search?collections=sentinel-2-l2a&datetime=2024-01-01/2024-03-31&filter-lang=cql2-text&filter=${cqlFilter}&limit=10`;
+                
+                // Make the GET request
+                const response = await fetch(searchUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/geo+json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Display the search results
+                if (data.features && data.features.length > 0) {
+                    searchStatus.innerHTML = `Found ${data.features.length} Sentinel-2 images:`;
+                    
+                    // Create HTML for each result
+                    data.features.forEach(item => {
+                        const date = new Date(item.properties.datetime).toLocaleDateString();
+                        const cloudCover = item.properties["eo:cloud_cover"] || "N/A";
+                        
+                        // Get the thumbnail URL from the rendered_preview asset
+                        let thumbnailUrl = '#';
+                        if (item.assets && item.assets.rendered_preview && item.assets.rendered_preview.href) {
+                            thumbnailUrl = item.assets.rendered_preview.href;
+                        }
+                        
+                        // Get the item bounds if available
+                        let bounds = null;
+                        if (item.bbox && item.bbox.length === 6) {
+                            // Converting 3D bbox [minx, miny, minz, maxx, maxy, maxz] to 2D [minx, miny, maxx, maxy]
+                            bounds = [item.bbox[0], item.bbox[1], item.bbox[3], item.bbox[4]];
+                        } else if (item.bbox && item.bbox.length === 4) {
+                            bounds = item.bbox;
+                        }
+                        
+                        const resultHtml = `
+                            <div class="result-item">
+                                <div class="result-thumbnail">
+                                    <img src="${thumbnailUrl}" alt="Preview" onerror="this.src='data:image/png;base64,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'">
+                                </div>
+                                <div class="result-info">
+                                    <div class="result-title">${item.id}</div>
+                                    <div class="result-date">Date: ${date}</div>
+                                    <div class="result-cloud">Cloud cover: ${cloudCover}%</div>
+                                    <a class="result-link" href="${item.links.find(l => l.rel === 'self')?.href || '#'}" target="_blank">View STAC Item</a>
+                                    <button class="view-map-btn" onclick="viewOnMap('${item.id}', ${JSON.stringify(bounds)})">View on Map</button>
+                                </div>
+                            </div>
+                        `;
+                        
+                        searchResults.innerHTML += resultHtml;
+                    });
+                } else {
+                    searchStatus.innerHTML = 'No images found for the selected criteria.';
+                }
+            } catch (error) {
+                console.error("Error searching STAC API:", error);
+                searchStatus.innerHTML = `Error searching STAC API: ${error.message}`;
+            } finally {
+                searchButton.disabled = false;
+            }
+        });
+    </script>
+    
+    <!-- Add global function for the "View on Map" button -->
+    <script>
+        function viewOnMap(itemId, bounds) {
+            // Reset all buttons first
+            document.querySelectorAll('.view-map-btn').forEach(btn => {
+                btn.textContent = 'View on Map';
+                btn.classList.remove('active');
+            });
+            
+            // Find and update the clicked button
+            const clickedButton = event.target;
+            clickedButton.textContent = 'Viewing';
+            clickedButton.classList.add('active');
+            
+            // Add the layer to the map
+            addStacLayerToMap(itemId, bounds);
+        }
+    </script>
+</body>
+</html>
