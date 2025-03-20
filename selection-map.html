@@ -12,147 +12,256 @@
     <!-- JSZip for handling the zipped GeoJSON -->
     <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
     
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    
     <style>
-        body { margin: 0; padding: 0; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Open Sans', sans-serif;
+            color: #333;
+        }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         #loading { 
             position: absolute; 
             top: 10px; 
             left: 10px; 
             padding: 10px; 
-            background: white; 
+            background: rgba(255, 255, 255, 0.9); 
             border-radius: 4px; 
             z-index: 1;
             display: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            font-size: 14px;
         }
         
-        /* Sidebar styles - now wider */
+        /* Sidebar styles */
         #sidebar {
             position: absolute;
             top: 0;
             right: 0;
-            width: 400px; /* Increased from 300px */
+            width: 400px;
             height: 100%;
             background: white;
             box-shadow: -2px 0 10px rgba(0,0,0,0.1);
             z-index: 2;
             overflow-y: auto;
-            padding: 10px;
+            padding: 15px;
             padding-bottom: 60px;
         }
         
         #sidebar h2 {
             margin-top: 5px;
             font-size: 18px;
+            color: #2c3e50;
+            font-weight: 500;
+            font-family: 'Roboto', sans-serif;
         }
         
-        #search-form {
-            margin-bottom: 15px;
-            padding: 10px;
-            background-color: #f5f5f5;
-            border-radius: 4px;
+        /* Map controls panel - improved for aesthetics */
+        #map-controls {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            z-index: 10;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            max-width: 300px;
+            font-family: 'Roboto', sans-serif;
         }
         
-        .form-group {
-            margin-bottom: 10px;
+        #map-controls.minimized {
+            width: 36px;
+            height: 36px;
         }
         
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
+        .control-header {
+            background: #3498db;
+            color: white;
+            padding: 8px 12px;
             font-size: 14px;
-            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 500;
         }
         
-        .form-group input {
-            width: 100%;
-            padding: 6px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
+        .control-header i {
+            transition: transform 0.3s;
+        }
+        
+        .control-header.collapsed i.fa-chevron-up {
+            transform: rotate(180deg);
+        }
+        
+        .layer-controls {
+            padding: 10px 12px;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            transition: max-height 0.3s ease;
+        }
+        
+        #map-controls.minimized .layer-controls {
+            display: none;
+        }
+        
+        .layer-item {
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            padding-bottom: 8px;
+        }
+        
+        .layer-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .layer-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .layer-header label {
+            margin-left: 6px;
+            font-size: 13px;
+            color: #2c3e50;
+        }
+        
+        .opacity-control {
+            margin-left: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        
+        .opacity-slider {
+            flex: 1;
+            height: 4px;
+            appearance: none;
+            background: #e0e0e0;
+            outline: none;
+            border-radius: 2px;
+        }
+        
+        .opacity-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
         }
         
         /* Window selection fields */
         .window-selection {
             margin-bottom: 20px;
-            padding: 10px;
-            background-color: #e9f7fe;
-            border-radius: 4px;
-            border-left: 4px solid #4285f4;
+            padding: 15px;
+            background-color: #f0f7ff;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+            font-family: 'Roboto', sans-serif;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
         .window-selection p {
             margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 13px;
-            color: #333;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #2c3e50;
         }
         
         .window-field {
             display: flex;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             align-items: center;
         }
         
         .window-field label {
             flex: 0 0 80px;
-            font-weight: bold;
+            font-weight: 500;
             font-size: 14px;
+            color: #2c3e50;
+        }
+        
+        .window-field-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         
         .window-field input {
             flex: 1;
-            padding: 6px;
+            padding: 8px 10px;
             border: 1px solid #ddd;
-            border-radius: 3px;
-            font-size: 12px;
+            border-radius: 4px;
+            font-size: 13px;
             background-color: #f8f8f8;
+            color: #2c3e50;
+        }
+        
+        .copy-btn {
+            background: #f1f1f1;
+            border: none;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #555;
+            transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #e0e0e0;
             color: #333;
         }
         
-        /* Window selection buttons */
-        .win-btn {
-            margin-left: 5px;
-            padding: 3px 6px;
-            font-size: 11px;
-            border-radius: 3px;
-            cursor: pointer;
-            border: none;
-        }
-        
-        .win-a-btn {
-            background-color: #4285f4;
-            color: white;
-        }
-        
-        .win-a-btn:hover {
-            background-color: #3367d6;
-        }
-        
-        .win-b-btn {
-            background-color: #fbbc05;
-            color: white;
-        }
-        
-        .win-b-btn:hover {
-            background-color: #f9a825;
-        }
-        
-        #search-results {
-            margin-top: 10px;
+        /* Selection info */
+        #selection-info {
+            padding: 10px 15px;
+            background-color: #f8f8f8;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #2c3e50;
         }
         
         /* Result item styling */
-        .result-item {
-            border: 1px solid #ddd;
+        #search-status {
             margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 4px;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        
+        .result-item {
+            border: 1px solid #e0e0e0;
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
             display: flex;
             flex-direction: row;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
         }
         
         .result-thumbnail {
-            margin-right: 10px;
+            margin-right: 12px;
             width: 100px;
             min-width: 100px;
             height: 100px;
@@ -160,7 +269,7 @@
             align-items: center;
             justify-content: center;
             background-color: #f5f5f5;
-            border-radius: 3px;
+            border-radius: 4px;
             overflow: hidden;
         }
         
@@ -178,60 +287,111 @@
         }
         
         .result-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #2c3e50;
         }
         
         .result-date, .result-cloud {
             color: #666;
             font-size: 12px;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
         }
         
         .result-link {
             display: block;
             margin-top: 5px;
             font-size: 12px;
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .result-link:hover {
+            text-decoration: underline;
+        }
+        
+        .result-actions {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
         }
         
         /* Button styling */
         .view-map-btn {
-            margin-top: 5px;
-            padding: 4px 8px;
-            background-color: #4285f4;
+            padding: 6px 10px;
+            background-color: #3498db;
             color: white;
             border: none;
-            border-radius: 3px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
+            transition: background-color 0.2s;
         }
         
         .view-map-btn:hover {
-            background-color: #3367d6;
+            background-color: #2980b9;
         }
         
         .view-map-btn.active {
-            background-color: #34a853;
+            background-color: #27ae60;
+        }
+        
+        .window-buttons {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        
+        /* Window selection buttons */
+        .win-btn {
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.2s;
+        }
+        
+        .win-a-btn {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .win-a-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .win-b-btn {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .win-b-btn:hover {
+            background-color: #d35400;
         }
         
         /* Pagination controls */
         #pagination-controls {
             margin-top: 15px;
             text-align: center;
+            padding-bottom: 20px;
         }
         
         #next-page-btn {
             padding: 8px 16px;
-            background-color: #4285f4;
+            background-color: #3498db;
             color: white;
             border: none;
-            border-radius: 3px;
+            border-radius: 4px;
             cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 13px;
         }
         
         #next-page-btn:hover {
-            background-color: #3367d6;
+            background-color: #2980b9;
         }
         
         #next-page-btn:disabled {
@@ -239,46 +399,68 @@
             cursor: not-allowed;
         }
         
-        /* Map layer controls - floating on the map */
-        #map-controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: white;
+        /* Toast notification for copy */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
             border-radius: 4px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            z-index: 10;
-            padding: 10px;
-            max-width: 250px;
-            display: none; /* Initially hidden */
-        }
-        
-        #map-controls h3 {
-            margin-top: 0;
-            margin-bottom: 8px;
             font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
         
-        /* Adjust existing layer controls for floating panel */
-        .layer-controls {
-            margin-top: 0;
-            padding: 8px;
-            background-color: #fff;
-            border-radius: 4px;
-            border-left: none;
+        .toast.show {
+            opacity: 1;
         }
         
-        .layer-item {
-            margin-bottom: 8px;
-            padding-bottom: 8px;
+        /* New styles for sidebar filters section */
+        .filters-section {
+            margin-bottom: 20px;
+            background-color: #f8f8f8;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         
-        .opacity-control {
-            padding-left: 24px;
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: #f0f7ff;
+            cursor: pointer;
+            border-left: 4px solid #3498db;
         }
         
-        .opacity-slider {
-            width: 100%;
+        .section-header h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #2c3e50;
+            font-weight: 500;
+            font-family: 'Roboto', sans-serif;
+        }
+        
+        .section-header i {
+            transition: transform 0.3s ease;
+        }
+        
+        #search-form {
+            padding: 15px;
+        }
+        
+        /* Form group styling remained the same */
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        .form-group:last-child {
+            margin-bottom: 0;
         }
     </style>
 </head>
@@ -286,47 +468,70 @@
     <div id="map"></div>
     <div id="loading">Loading S2 grid data...</div>
     
-    <!-- New floating map controls -->
-    <div id="map-controls">
-        <h3>Layer Controls</h3>
+    <!-- Toast notification for copy feedback -->
+    <div id="toast" class="toast">Copied to clipboard</div>
+    
+    <!-- New floating map controls - minimizable -->
+    <div id="map-controls" class="minimized">
+        <div class="control-header" onclick="toggleMapControls()">
+            <span>Layer Controls</span>
+            <i class="fas fa-chevron-up"></i>
+        </div>
         <div class="layer-controls" id="layer-controls-container">
             <!-- Layer items will be added here dynamically -->
         </div>
     </div>
     
     <div id="sidebar">
-        <h2>Sentinel-2 Grid Explorer</h2>
+        <h2><i class="fas fa-satellite"></i> FTW Model Input Selection</h2>
         
         <!-- Window Selection Section -->
         <div class="window-selection">
-            <p><strong>FTW Model Input Selection</strong></p>
+            <p><strong><i class="fas fa-images"></i> FTW Model Input Selection</strong></p>
             <p>Select two images as input to the FTW model by clicking "Win A" or "Win B" buttons on the search results.</p>
             
             <div class="window-field">
                 <label for="window-a">Window A:</label>
-                <input type="text" id="window-a" readonly placeholder="Select an image...">
+                <div class="window-field-content">
+                    <input type="text" id="window-a" readonly placeholder="Select an image...">
+                    <button class="copy-btn" onclick="copyToClipboard('window-a')">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
             </div>
             
             <div class="window-field">
                 <label for="window-b">Window B:</label>
-                <input type="text" id="window-b" readonly placeholder="Select an image...">
+                <div class="window-field-content">
+                    <input type="text" id="window-b" readonly placeholder="Select an image...">
+                    <button class="copy-btn" onclick="copyToClipboard('window-b')">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
             </div>
         </div>
         
-        <div id="selection-info">No grid cell selected</div>
+        <div id="selection-info"><i class="fas fa-info-circle"></i> No grid cell selected</div>
         
-        <div id="search-form">
-            <div class="form-group">
-                <label for="start-date">Start Date (optional):</label>
-                <input type="date" id="start-date" placeholder="Start Date">
+        <!-- Filters section moved back to sidebar -->
+        <div class="filters-section">
+            <div class="section-header" onclick="toggleSidebarFilters()">
+                <h3><i class="fas fa-filter"></i> Search Filters</h3>
+                <i class="fas fa-chevron-down" id="filters-toggle-icon"></i>
             </div>
-            <div class="form-group">
-                <label for="end-date">End Date (optional):</label>
-                <input type="date" id="end-date" placeholder="End Date">
-            </div>
-            <div class="form-group">
-                <label for="cloud-cover">Max Cloud Cover %:</label>
-                <input type="number" id="cloud-cover" min="0" max="100" value="10">
+            <div id="search-form">
+                <div class="form-group">
+                    <label for="start-date">Start Date:</label>
+                    <input type="date" id="start-date" placeholder="Start Date">
+                </div>
+                <div class="form-group">
+                    <label for="end-date">End Date:</label>
+                    <input type="date" id="end-date" placeholder="End Date">
+                </div>
+                <div class="form-group">
+                    <label for="cloud-cover">Max Cloud Cover %:</label>
+                    <input type="number" id="cloud-cover" min="0" max="100" value="10">
+                </div>
             </div>
         </div>
         
@@ -393,6 +598,57 @@
                 active: false
             }
         };
+        
+        // Function to toggle map controls visibility
+        function toggleMapControls() {
+            const controls = document.getElementById('map-controls');
+            controls.classList.toggle('minimized');
+            
+            // Save preference in localStorage
+            localStorage.setItem('mapControlsMinimized', controls.classList.contains('minimized'));
+        }
+        
+        // Function to toggle sidebar filters visibility
+        function toggleSidebarFilters() {
+            const searchForm = document.getElementById('search-form');
+            const toggleIcon = document.getElementById('filters-toggle-icon');
+            
+            // Check if the form is visible by getting its computed style
+            const isVisible = window.getComputedStyle(searchForm).display !== 'none';
+            
+            // Toggle visibility
+            searchForm.style.display = isVisible ? 'none' : 'block';
+            
+            // Rotate the icon based on state
+            toggleIcon.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+            
+            // Save preference
+            localStorage.setItem('filtersVisible', !isVisible);
+        }
+        
+        // Function to copy window ID to clipboard
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.value;
+            
+            if (!text) return;
+            
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    // Show toast notification
+                    const toast = document.getElementById('toast');
+                    toast.textContent = 'Copied to clipboard';
+                    toast.classList.add('show');
+                    
+                    // Hide toast after 2 seconds
+                    setTimeout(() => {
+                        toast.classList.remove('show');
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+        }
         
         // Function to add a STAC item as a layer to the map
         function addStacLayerToMap(itemId, bounds, target = 'current') {
@@ -481,14 +737,17 @@
                 if (state.active) {
                     hasActiveLayers = true;
                     
-                    // Create friendly name
-                    let layerName;
+                    // Create friendly name and icon
+                    let layerName, layerIcon;
                     if (key === 'current') {
                         layerName = 'Current Selection';
+                        layerIcon = 'fa-image';
                     } else if (key === 'window-a') {
                         layerName = 'Window A Layer';
+                        layerIcon = 'fa-square-a';
                     } else {
                         layerName = 'Window B Layer';
+                        layerIcon = 'fa-square-b';
                     }
                     
                     // Create the layer control HTML
@@ -496,10 +755,10 @@
                         <div class="layer-item" id="layer-item-${key}">
                             <div class="layer-header">
                                 <input type="checkbox" id="layer-${key}" class="layer-visibility" onchange="toggleLayerVisibility('${key}')" ${state.visible ? 'checked' : ''}>
-                                <label for="layer-${key}">${layerName}</label>
+                                <label for="layer-${key}"><i class="fas ${layerIcon}"></i> ${layerName}</label>
                             </div>
                             <div class="opacity-control">
-                                <label>Opacity:</label>
+                                <span>Opacity:</span>
                                 <input type="range" id="opacity-${key}" class="opacity-slider" min="0" max="1" step="0.1" value="${state.opacity}" 
                                        onchange="updateLayerOpacity('${key}', this.value)" 
                                        oninput="updateLayerOpacity('${key}', this.value)">
@@ -509,6 +768,11 @@
                     
                     controlsContainer.innerHTML += layerHtml;
                 }
+            }
+            
+            // Show map controls if there are active layers and expand them
+            if (hasActiveLayers && mapControls.classList.contains('minimized')) {
+                mapControls.classList.remove('minimized');
             }
             
             // Show or hide the controls container based on active layers
@@ -825,6 +1089,25 @@
                 
                 // Initialize the layer controls
                 updateLayerControls();
+                
+                // Load user preferences from localStorage
+                const mapControlsMinimized = localStorage.getItem('mapControlsMinimized') === 'true';
+                const filtersVisible = localStorage.getItem('filtersVisible') === 'true';
+                
+                // Apply preferences
+                if (!mapControlsMinimized) {
+                    document.getElementById('map-controls').classList.remove('minimized');
+                }
+                
+                // Set initial filter visibility
+                const searchForm = document.getElementById('search-form');
+                const toggleIcon = document.getElementById('filters-toggle-icon');
+                
+                if (!filtersVisible) {
+                    searchForm.style.display = 'none';
+                } else {
+                    toggleIcon.style.transform = 'rotate(180deg)';
+                }
                 
             } catch (error) {
                 console.error("Error loading S2 grid data:", error);
