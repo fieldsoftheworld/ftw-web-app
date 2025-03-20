@@ -440,4 +440,19 @@ body {
 
 .form-group:last-child {
     margin-bottom: 0;
+}
+
+/* Add styling for the selected state of window buttons */
+.win-btn.selected {
+    opacity: 1;
+    font-weight: bold;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+}
+
+.win-a-btn.selected {
+    background-color: #2573a7;
+}
+
+.win-b-btn.selected {
+    background-color: #c27d0e;
 } 

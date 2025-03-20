@@ -222,8 +222,46 @@ function viewOnMap(itemId, bounds) {
 
 // Function to select a window
 function selectWindow(window, itemId) {
-    // Update the window field with the selected item ID
     const windowField = document.getElementById(`window-${window}`);
+    const allButtons = document.querySelectorAll(`.win-${window}-btn`);
+    
+    // Check if this item is already selected for this window (toggle behavior)
+    if (windowField.value === itemId) {
+        // Deselect the item
+        windowField.value = '';
+        
+        // Reset all buttons for this window
+        allButtons.forEach(btn => {
+            btn.textContent = `Win ${window.toUpperCase()}`;
+            btn.classList.remove('selected');
+        });
+        
+        // If there's an active layer for this window, remove it
+        if (layerState[`window-${window}`].active) {
+            // Remove the layer if it exists
+            if (layerState[`window-${window}`].layerId) {
+                if (map.getLayer(layerState[`window-${window}`].layerId)) {
+                    map.removeLayer(layerState[`window-${window}`].layerId);
+                }
+                if (map.getSource(layerState[`window-${window}`].layerId)) {
+                    map.removeSource(layerState[`window-${window}`].layerId);
+                }
+            }
+            
+            // Reset the layer state
+            layerState[`window-${window}`].active = false;
+            layerState[`window-${window}`].layerId = null;
+            layerState[`window-${window}`].itemId = null;
+            
+            // Update the layer controls
+            updateLayerControls();
+        }
+        
+        return; // Exit the function
+    }
+    
+    // Normal selection flow - select the item
+    // Update the window field with the selected item ID
     windowField.value = itemId;
     
     // Add the selected image as a layer for this window
@@ -231,25 +269,24 @@ function selectWindow(window, itemId) {
     
     // Make the layer visible
     layerState[`window-${window}`].visible = true;
-    document.getElementById(`layer-window-${window}`).checked = true;
-    toggleLayerVisibility(`window-${window}`);
     
-    // Optional: Add visual feedback that the selection was made
-    const allButtons = document.querySelectorAll(`.win-${window}-btn`);
+    // Try to update the checkbox if it exists
+    const checkbox = document.getElementById(`layer-window-${window}`);
+    if (checkbox) {
+        checkbox.checked = true;
+        toggleLayerVisibility(`window-${window}`);
+    }
+    
+    // Reset all buttons for this window first
     allButtons.forEach(btn => {
-        btn.style.opacity = '0.7';
         btn.textContent = `Win ${window.toUpperCase()}`;
+        btn.classList.remove('selected');
     });
     
-    // Find the clicked button and highlight it
+    // Find the clicked button and highlight it permanently
     const clickedButton = event.target;
-    clickedButton.style.opacity = '1';
-    clickedButton.textContent = `Selected`;
-    
-    // Reset the button after a delay
-    setTimeout(() => {
-        clickedButton.textContent = `Win ${window.toUpperCase()}`;
-    }, 1000);
+    clickedButton.textContent = 'Selected';
+    clickedButton.classList.add('selected');
 }
 
 // References to DOM elements for use in this file
